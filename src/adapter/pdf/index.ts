@@ -1,7 +1,7 @@
 import puppeteer, { PDFOptions } from "puppeteer";
 import { engine } from "../../engine";
 
-export async function htmlToPdfBuffer(html: string, options?: PDFOptions): Promise<Buffer> {
+export async function htmlToPdfBuffer(html: string, options?: PDFOptions & { isDynamicDimensions: boolean }): Promise<Buffer> {
     const browser = await puppeteer.launch({
         headless: true,
         args: [
@@ -20,14 +20,31 @@ export async function htmlToPdfBuffer(html: string, options?: PDFOptions): Promi
         engine.info("Iniciando geração do template")
 
         const page = await browser.newPage();
-        page.setDefaultNavigationTimeout(0);
         await page.setContent(html, {
             waitUntil: ["domcontentloaded", "load", "networkidle0", "networkidle2"],
         });
 
         await page.emulateMediaType("screen")
 
-        const pdfBuffer = await page.pdf(options);
+        const contentHeight = await page.evaluate(() => {
+            const body = document.querySelector('body');
+            return body ? body.scrollHeight : 0;
+        });
+
+        const contentWidth = await page.evaluate(() => {
+            const body = document.querySelector('body');
+            return body ? body.clientWidth : 0;
+        });
+
+        const adjustedOptions = {
+            ...options,
+            ...(options?.isDynamicDimensions && {
+                width: `${contentWidth}px`,
+                height: `${contentHeight}px`,
+            })
+        };
+
+        const pdfBuffer = await page.pdf(adjustedOptions);
 
         engine.info("Geração do template finalizada")
 
@@ -38,5 +55,4 @@ export async function htmlToPdfBuffer(html: string, options?: PDFOptions): Promi
     } finally {
         browser.close()
     }
-
 }
